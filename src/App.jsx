@@ -1,14 +1,13 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { defaultTemplates } from './defaultTemplates'
+import { createClient } from '@supabase/supabase-js'
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
-
-// 本地存储操作
-const storage = {
-  getTemplates: () => JSON.parse(localStorage.getItem('templates') || '[]'),
-  saveTemplates: (templates) => localStorage.setItem('templates', JSON.stringify(templates)),
-}
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
 
 function App() {
   const [templates, setTemplates] = useState([])
@@ -22,38 +21,56 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [viewTemplate, setViewTemplate] = useState(null)
   const [searchKeyword, setSearchKeyword] = useState('')
+  const [dbLoading, setDbLoading] = useState(true)
 
   useEffect(() => {
-    const saved = storage.getTemplates()
-    if (saved.length === 0) {
-      storage.saveTemplates(defaultTemplates)
-      setTemplates(defaultTemplates)
-    } else {
-      setTemplates(saved)
-    }
+    loadTemplates()
   }, [])
 
-  const saveTemplate = () => {
+  const loadTemplates = async () => {
+    setDbLoading(true)
+    const { data, error } = await supabase.from('templates').select('*').order('name')
+    if (error) {
+      alert('加载失败：' + error.message)
+      setDbLoading(false)
+      return
+    }
+    if (data.length === 0) {
+      // 首次使用，导入默认模版
+      const { error: insertError } = await supabase.from('templates').insert(
+        defaultTemplates.map(t => ({ name: t.name, content: t.content }))
+      )
+      if (!insertError) {
+        const { data: newData } = await supabase.from('templates').select('*').order('name')
+        setTemplates(newData || [])
+      }
+    } else {
+      setTemplates(data)
+    }
+    setDbLoading(false)
+  }
+
+  const saveTemplate = async () => {
     if (!importName.trim() || !importContent.trim()) return alert('请填写企业名称和模版内容')
     const existing = templates.find(t => t.name === importName.trim())
-    let updated
     if (existing) {
-      updated = templates.map(t => t.name === importName.trim() ? { ...t, content: importContent } : t)
+      const { error } = await supabase.from('templates').update({ content: importContent, updated_at: new Date() }).eq('id', existing.id)
+      if (error) return alert('保存失败：' + error.message)
     } else {
-      updated = [...templates, { id: Date.now(), name: importName.trim(), content: importContent }]
+      const { error } = await supabase.from('templates').insert({ name: importName.trim(), content: importContent })
+      if (error) return alert('保存失败：' + error.message)
     }
-    storage.saveTemplates(updated)
-    setTemplates(updated)
+    await loadTemplates()
     setImportName('')
     setImportContent('')
     alert('保存成功')
   }
 
-  const deleteTemplate = (id) => {
+  const deleteTemplate = async (id) => {
     if (!confirm('确认删除？')) return
-    const updated = templates.filter(t => t.id !== id)
-    storage.saveTemplates(updated)
-    setTemplates(updated)
+    const { error } = await supabase.from('templates').delete().eq('id', id)
+    if (error) return alert('删除失败：' + error.message)
+    await loadTemplates()
   }
 
   const compareWithAI = async () => {
@@ -106,14 +123,12 @@ ${newOrder}
     setLoading(false)
   }
 
-  const confirmSave = () => {
+  const confirmSave = async () => {
     if (!selectedTemplate || !editableResult.trim()) return
     const clean = editableResult.replace(/<CHANGED>/g, '').replace(/<\/CHANGED>/g, '')
-    const updated = templates.map(t =>
-      t.id === selectedTemplate.id ? { ...t, content: clean } : t
-    )
-    storage.saveTemplates(updated)
-    setTemplates(updated)
+    const { error } = await supabase.from('templates').update({ content: clean, updated_at: new Date() }).eq('id', selectedTemplate.id)
+    if (error) return alert('保存失败：' + error.message)
+    await loadTemplates()
     setComparedResult(null)
     setEditableResult('')
     setNewOrder('')
@@ -156,7 +171,9 @@ ${newOrder}
               value={searchKeyword}
               onChange={e => setSearchKeyword(e.target.value)}
             />
-            {templates.length === 0 ? (
+            {dbLoading ? (
+              <p className="empty">加载中...</p>
+            ) : templates.length === 0 ? (
               <p className="empty">暂无模版，请先导入</p>
             ) : (
               <div className="templates">
