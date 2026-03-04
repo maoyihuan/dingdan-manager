@@ -5,10 +5,11 @@ import { createClient } from '@supabase/supabase-js'
 
 const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY
 const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
-
+    'https://fxbfnamrxmuvrrqpfhqj.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4YmZuYW1yeG11dnJyc
+  XBmaHFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MjYwMjksImV4cCI6MjA4ODEwMjAyOX0.EWFyHHJcFhnjbq6btP
+  CEdooVW0RuojzVa8TXCR22gYY'
+  )
 function App() {
   const [templates, setTemplates] = useState([])
   const [activeTab, setActiveTab] = useState('list')
